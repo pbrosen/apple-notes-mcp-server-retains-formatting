@@ -169,6 +169,14 @@ The server exposes four tools; you drive them with plain language. Examples:
 > "Move everything that's checked in Today and This Week into the Done section of my 'To‑Do' note."
 → `move_checked_items` (moved items keep their checked state; unchecked items aren't touched)
 
+**Archive completed items into a *separate* note**
+> "Archive all the completed items from my 'To‑Do' note."
+> "Move everything I've finished into my 'Done Archive' note."
+→ `archive_completed_items` (moves every checked item into a separate note — default "Completed
+To‑Do's", created if it doesn't exist — at the top, kept checked. Copies + verifies each item into the
+archive before removing it from the source, so a task is never lost. Pass a note name to use your own
+archive note.)
+
 Behavior notes:
 - A **section header** is any non‑empty, non‑checklist line (the note's first line is its title). A
   Notes "Heading"‑styled line works too.

@@ -36,6 +36,7 @@ This server works around it with two subsystems:
 - ✅ Append new **unchecked** items to a specific section
 - ✅ Check / uncheck a specific item (exact or fuzzy match; no-op if already in that state)
 - ✅ Move all checked items from one/more sections into a target section, **preserving checked state**
+- ✅ Archive all checked items into a **separate** completed-tasks note (created if missing), at the top, kept checked
 - ✅ Verify-after-write on every mutation; aborts rather than guessing on missing/ambiguous targets
 - ✅ No screenshots, no pixel-clicking, no direct database writes
 
@@ -47,6 +48,7 @@ This server works around it with two subsystems:
 | `append_checklist_items` | `noteTitle`, `section`, `items[]` | Appends new **unchecked** items to the end of a section. |
 | `set_item_checked` | `noteTitle`, `itemText`, `checked` | Checks/unchecks one item; no-op if already in that state. |
 | `move_checked_items` | `noteTitle`, `fromSections[]`, `toSection` | Moves every checked item into the target section, keeping checked state. |
+| `archive_completed_items` | `noteTitle`, `archiveNoteTitle?` | Moves every checked item into a **separate** completed-tasks note (default "Completed To-Do's", created if missing), at the top, kept checked. Copies + verifies before deleting from the source, so a task is never lost. |
 
 ## Quick start
 
@@ -128,7 +130,8 @@ More freeform notes will still read their checkboxes correctly but may report ex
   The most-recently-appended item in a section stays regular. Items are otherwise correct (right text,
   unchecked, correct section), and existing (human-typed) items are never affected. Standard un-bolding
   (⌘B, re-applying Body/Checklist, timing changes) did not reliably reverse it in testing; a proper fix
-  is still being investigated.
+  is still being investigated. The same cosmetic bold can appear on items placed by
+  `archive_completed_items` (it pastes each item into a fresh line, which finalizes the previous one).
 - **Always validate on a disposable scratch note before pointing this at a note you rely on.**
 
 ## Development
