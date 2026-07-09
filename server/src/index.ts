@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { readNote } from "./reader/reader.js";
 import { append, setChecked, moveChecked } from "./writer/writer.js";
+import { archiveCompletedItems } from "./writer/archive.js";
 
 const server = new Server(
   { name: "apple-notes-checklist-mcp", version: "0.1.0" },
@@ -61,6 +62,19 @@ const TOOLS = [
       required: ["noteTitle", "fromSections", "toSection"],
     },
   },
+  {
+    name: "archive_completed_items",
+    description:
+      "Move every checked item from a source note into a separate completed-tasks note, placed at the top and kept checked. Creates the destination note if it doesn't exist. archiveNoteTitle is optional (defaults to \"Completed To-Do's\").",
+    inputSchema: {
+      type: "object",
+      properties: {
+        noteTitle: { type: "string" },
+        archiveNoteTitle: { type: "string" },
+      },
+      required: ["noteTitle"],
+    },
+  },
 ];
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
@@ -93,6 +107,8 @@ function dispatch(name: string, a: Record<string, unknown>): unknown {
     case "move_checked_items":
       moveChecked(a.noteTitle as string, a.fromSections as string[], a.toSection as string);
       return { ok: true, note: readNote(a.noteTitle as string) };
+    case "archive_completed_items":
+      return archiveCompletedItems(a.noteTitle as string, a.archiveNoteTitle as string | undefined);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
