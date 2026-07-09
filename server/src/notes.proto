@@ -1,0 +1,28 @@
+// Trimmed Apple Notes protobuf schema — only the messages the Reader needs.
+// Field numbers confirmed empirically on macOS 26.5.1 / Notes 4.13 (see docs/phase0-findings.md).
+// NOTE: proto.ts embeds a copy of this schema as a string (PROTO_SCHEMA) so it works after
+// `tsc` build without copying this file into dist/. Keep the two in sync.
+syntax = "proto2";
+
+message NoteStoreProto { optional Document document = 2; }
+message Document { optional int32 version = 2; optional Note note = 3; }
+
+message Note {
+  optional string note_text = 2;
+  repeated AttributeRun attribute_run = 5;
+}
+
+message AttributeRun {
+  optional int32 length = 1;
+  optional ParagraphStyle paragraph_style = 2;
+}
+
+message ParagraphStyle {
+  optional int32 style_type = 1;
+  optional Checklist checklist = 5;
+}
+
+message Checklist {
+  optional bytes uuid = 1;
+  optional int32 done = 2;
+}
