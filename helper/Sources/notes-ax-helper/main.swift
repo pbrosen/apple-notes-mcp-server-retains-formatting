@@ -41,11 +41,17 @@ func firstChild(_ el: AXUIElement, _ r: String) -> AXUIElement? { children(el).f
 func allChildren(_ el: AXUIElement, _ r: String) -> [AXUIElement] { children(el).filter { role($0) == r } }
 
 func findTextArea(_ app: AXUIElement) -> AXUIElement? {
-  guard let win = firstChild(app, "AXWindow"),
-        let split = firstChild(win, "AXSplitGroup"),
-        let editor = allChildren(split, "AXScrollArea").last
-  else { return nil }
-  return firstChild(editor, "AXTextArea")
+  // Search every window for the one that actually contains the note editor (a split group whose
+  // last scroll area holds a text area). Don't assume the editor is the frontmost window — Notes
+  // can have stray/secondary windows in front.
+  for win in allChildren(app, "AXWindow") {
+    if let split = firstChild(win, "AXSplitGroup"),
+       let editor = allChildren(split, "AXScrollArea").last,
+       let ta = firstChild(editor, "AXTextArea") {
+      return ta
+    }
+  }
+  return nil
 }
 
 func getText(_ ta: AXUIElement) -> String { (attr(ta, kAXValueAttribute as String) as? String) ?? "" }
@@ -99,6 +105,7 @@ let KEY_U: CGKeyCode = 32
 let KEY_L: CGKeyCode = 37
 let KEY_X: CGKeyCode = 7
 let KEY_V: CGKeyCode = 9
+let KEY_C: CGKeyCode = 8
 
 // Guard against editing the wrong note: the editor operates on whatever note is frontmost, so
 // confirm the front note's title (its first line) matches what the caller expects.
@@ -214,6 +221,56 @@ case "move":
     key(KEY_RETURN)
     key(KEY_V, [.maskCommand])
   }
+  ok()
+
+case "copy_line":
+  guard let lineText = json["lineText"] as? String else { fail("copy_line: missing lineText") }
+  verifyFrontNote(ta, json)
+  focusEditor(notes, ta)
+  let text = getText(ta)
+  guard let (loc, len) = lineRange(text, lineText) else {
+    fail("copy_line: line not found or ambiguous: \(lineText)")
+  }
+  let ns = text as NSString
+  // include the trailing newline so the clipboard carries a whole checklist paragraph (style + checked)
+  let includeNL = (loc + len) < ns.length
+  if !setSelection(ta, loc, len + (includeNL ? 1 : 0)) { fail("copy_line: could not select") }
+  usleep(40_000)
+  key(KEY_C, [.maskCommand])
+  ok()
+
+case "paste_at_top":
+  verifyFrontNote(ta, json)
+  focusEditor(notes, ta)
+  let text = getText(ta)
+  let ns = text as NSString
+  let firstNL = ns.range(of: "\n")
+  let titleLen = firstNL.location != NSNotFound ? firstNL.location : ns.length
+  // Position at the end of the title line and open a fresh line, THEN paste. Pasting a checklist
+  // paragraph at the start of an existing checklist line merges the two; pasting into a fresh line
+  // does not.
+  if !setSelection(ta, titleLen, 0) { fail("paste_at_top: could not position") }
+  usleep(40_000)
+  key(KEY_RETURN)
+  key(KEY_V, [.maskCommand])
+  ok()
+
+case "delete_line":
+  guard let lineText = json["lineText"] as? String else { fail("delete_line: missing lineText") }
+  verifyFrontNote(ta, json)
+  focusEditor(notes, ta)
+  let text = getText(ta)
+  guard let (loc, len) = lineRange(text, lineText) else {
+    fail("delete_line: line not found or ambiguous: \(lineText)")
+  }
+  let ns = text as NSString
+  let includeNL = (loc + len) < ns.length
+  if !setSelection(ta, loc, len + (includeNL ? 1 : 0)) { fail("delete_line: could not select") }
+  usleep(40_000)
+  // Remove the selection via ⌘X (proven to reliably delete a selected line, unlike a synthetic
+  // Backspace). It overwrites the clipboard, which is fine — the archive flow already pasted this
+  // item before deleting, and the next item does its own copy.
+  key(KEY_X, [.maskCommand])
   ok()
 
 default:
