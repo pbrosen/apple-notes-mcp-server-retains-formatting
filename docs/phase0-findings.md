@@ -37,9 +37,40 @@ Machine: macOS 26.5.1 (build 25F80), Notes.app 4.13. Probed 2026-07-08.
   WHERE o.ZTITLE1 = ? AND (o.ZMARKEDFORDELETION IS NULL OR o.ZMARKEDFORDELETION = 0);
   ```
 
-## Protobuf layout (confirmed)
+## Protobuf layout (confirmed empirically)
 
-_(to be filled by Task 2)_
+`ZDATA` = gzip (`1f 8b 08` magic) → protobuf. Confirmed by decoding a real note and
+checking that per-run lengths sum exactly to `note_text.length` (2465 = 2465 ✓).
+
+| Message.field | Number | Wire | Notes |
+|---|---|---|---|
+| `NoteStoreProto.document` | 2 | msg | |
+| `Document.note` | 3 | msg | |
+| `Note.note_text` | 2 | string | `\n`-separated paragraphs |
+| `Note.attribute_run` | **5** | msg (repeated) | 59 runs summed to full text length |
+| `AttributeRun.length` | 1 | varint | chars this run covers |
+| `AttributeRun.paragraph_style` | 2 | msg | absent for plain paragraphs |
+| `ParagraphStyle.style_type` | 1 | varint | **absent** for body/plain lines |
+| `ParagraphStyle.checklist` | 5 | msg | present ⇒ the paragraph is a checklist row |
+| `Checklist.done` | 2 | varint | `1` = checked, absent/`0` = unchecked |
+
+(Field 3 under `Note` is a different repeated structure — not attribute_run — ignore it.)
+
+### Confirmed enum / detection rules
+- **Checklist row:** `style_type == 103` AND a `checklist` submessage is present. Checked ⇔ `checklist.done == 1`. (Matched documented default of 103.)
+- **⚠️ Headings are NOT reliably style-typed.** In the probed note, the section labels
+  ("Personal", "High Priority", "Today", "Done", …) have **`style_type` absent** — they
+  are plain text lines, not Notes "Heading" style. So section detection **cannot** rely on
+  Title/Heading/Subheading style; a section header is better defined as **any non-empty,
+  non-checklist paragraph** (excluding the note's first title line). This is a design change
+  from the plan's assumption — pending confirmation of how the user's real notes are built.
+- The note's first line (its title) also had `style_type` absent; use `ZTITLE1` (or the
+  first line) as the title, not `style_type == 0`.
+
+### Privacy note
+The probed note ("MCP Scratch List") turned out to contain **real, sensitive personal
+content**, not throwaway data. Its decoded blob was NOT committed and has been deleted from
+disk. A genuinely disposable note is needed before building the fixture and testing the Writer.
 
 ## Accessibility tree
 
