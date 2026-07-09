@@ -39,7 +39,18 @@ and Phase 0 in `docs/superpowers/plans/`).
 
   The Swift helper inherits the host app's Accessibility grant (it does not need its own entry).
 
-## Build
+## Download & install
+
+```bash
+git clone <REPO_URL> apple-notes-checklist-mcp
+cd apple-notes-checklist-mcp
+./scripts/setup.sh          # builds the Swift helper + the TS server
+```
+
+Then grant permissions and add it to your Claude client — full step‑by‑step in
+**[docs/USING-WITH-CLAUDE.md](docs/USING-WITH-CLAUDE.md)**.
+
+## Build (manual)
 
 ```bash
 # 1. Build the Swift Accessibility helper
