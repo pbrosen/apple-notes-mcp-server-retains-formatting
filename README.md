@@ -84,6 +84,29 @@ Then:
 - Edits never touch the note title or other sections, are additive/targeted (never select-all or retype),
   and are verified before returning. The Writer confirms the correct note is frontmost before editing.
 
+## Note structure it expects
+
+The Reader models a note as: **the first line is the title; any non-empty line that isn't a checklist
+row is a section header; checklist rows belong to the header above them.** Reading the
+**checked/unchecked state is reliable no matter how the note is laid out** — that comes from Apple's
+underlying data, not from guessing at structure.
+
+**Works well:**
+- Section labels as plain text *or* as Notes "Heading" style
+- One section, many sections, or a flat checklist with no sections (items come back ungrouped)
+- Any mix of checked/unchecked items, with blank lines between things
+
+**Can be misread** (because any non-checklist line is treated as a header):
+- Prose/notes written *between* checklist items → treated as a new section header
+- Bulleted or numbered list items mixed in with checklists → treated as headers
+- Nested / indented sub-items → flattened (checked state preserved, hierarchy lost)
+- Tables, images, and attachments → not represented
+- Duplicate section names or item text → the write tools **refuse and ask you to disambiguate**
+  rather than edit the wrong line
+
+In short: it's built for the common **"optional section labels + checklist items"** to-do pattern.
+More freeform notes will still read their checkboxes correctly but may report extra "sections."
+
 ## Known limitations & risks
 
 - Relies on a **reverse-engineered, undocumented** on-disk format that Apple can change in any

@@ -144,7 +144,25 @@ Behavior notes:
 
 ---
 
-## 6. Troubleshooting
+## 6. Which note structures work
+
+Reading the **checked/unchecked state is reliable regardless of layout** (it comes from Apple's data,
+not from guessing). The *grouping* into sections assumes: first line = title; any non-empty,
+non-checklist line = a section header; checklist rows belong to the header above them.
+
+- **Works well:** section labels as plain text or Notes "Heading" style; one, many, or zero sections;
+  any checked/unchecked mix.
+- **Can be misread** (any non-checklist line becomes a "header"): prose written between checklist
+  items; bulleted/numbered lists mixed in; nested/indented sub-items (flattened — state kept,
+  hierarchy lost); tables/images/attachments.
+- **Duplicates:** if two sections or two items share the same text, the write tools refuse and ask you
+  to disambiguate rather than edit the wrong line.
+
+It's built for the common "optional section labels + checklist items" to-do pattern. Freeform notes
+still read their checkboxes correctly but may report extra sections. If your note is more complex,
+try the read tool first to see how it's interpreted before using the write tools.
+
+## 7. Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
@@ -160,7 +178,7 @@ Behavior notes:
 
 ---
 
-## 7. Important caveats
+## 8. Important caveats
 
 - This reads a **reverse‑engineered, undocumented** on‑disk format. It's verified for macOS 26 /
   Notes 4.13; a major macOS/Notes update could change the format. If reads start returning wrong
