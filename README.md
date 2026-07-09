@@ -106,4 +106,4 @@ Layout: `server/` (TypeScript MCP server + Reader/Writer), `helper/` (Swift Acce
 
 ## License
 
-No license is set yet — add one before wide distribution.
+[MIT](LICENSE) © pbrosen
