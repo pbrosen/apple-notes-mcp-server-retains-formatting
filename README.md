@@ -1,82 +1,43 @@
 # apple-notes-checklist-mcp
 
-An MCP server that reads and edits **Apple Notes checklists with their true checked-state** —
-something the standard AppleScript/JXA bridge cannot do.
+> An [MCP](https://modelcontextprotocol.io) server that reads and edits **Apple Notes checklists —
+> including their true checked / unchecked state** — which the standard AppleScript/JXA bridge cannot do.
+
+Point Claude (or any MCP client) at your checklist notes and ask it to read them with real
+checked-state, add items, tick things off, and sweep completed items into a "Done" section — safely,
+by driving the Notes app itself rather than editing files behind its back.
+
+```
+You: "What's still open on my 'To-Do' note, and move everything that's checked into Done."
+Claude → read_note → move_checked_items → "Moved 3 completed items to Done. 5 items still open in Today…"
+```
 
 ## Why this exists
 
-Apple Notes checklists are a paragraph *style* stored in a gzip-compressed protobuf blob inside
-`NoteStore.sqlite`. AppleScript's `body` property only exposes a flattened HTML rendering with
-no checked/unchecked state, so AppleScript-based tools read every checklist line as a plain
-bullet and turn checkboxes back into bullets when they write. This server works around that with
-two subsystems:
+Apple Notes checklists are a paragraph **style** stored in a gzip-compressed protobuf blob inside
+`NoteStore.sqlite`. AppleScript's `body` property only exposes a flattened HTML rendering with **no
+checked/unchecked state** — so AppleScript-based tools read every checklist line as a plain bullet and
+turn checkboxes back into bullets when they write. That's a limitation of Apple's scripting bridge
+itself, not of any one tool.
 
-- **Reader** — reads a read-only snapshot of `NoteStore.sqlite`, decompresses the note blob, and
-  parses the protobuf to recover section headers, item text, and true checked-state. It never
+This server works around it with two subsystems:
+
+- **Reader** — reads a **read-only snapshot** of `NoteStore.sqlite`, decompresses the note blob, and
+  parses the protobuf to recover section headers, item text, and **true checked-state**. It never
   touches the live database.
-- **Writer** — edits the live note through the macOS **Accessibility API** (a small compiled
-  Swift helper), positioning by text/selection rather than pixel coordinates. Every mutation is
-  verified by re-reading via the Reader before returning success.
+- **Writer** — edits the live note through the macOS **Accessibility API** (a small compiled Swift
+  helper), positioning by text/selection rather than pixel coordinates. It opens the target note,
+  verifies it's the right one, makes the edit, then **re-reads via the Reader to confirm** before
+  reporting success.
 
-Verified on **macOS 26.5.1, Notes.app 4.13**. The on-disk format is reverse-engineered and
-undocumented by Apple; re-verify after major macOS/Notes upgrades (see `docs/phase0-findings.md`
-and Phase 0 in `docs/superpowers/plans/`).
+## Features
 
-## Requirements
-
-- macOS with Apple Notes set up
-- Node.js 18+ (developed on 22) and npm
-- Swift toolchain (for building the AX helper) — `swift build`
-- Two macOS permissions granted to **the app that runs this server** (Terminal, iTerm,
-  Conductor, Claude Desktop — whichever launches the Node process). Neither can be granted
-  programmatically; you must toggle them by hand:
-
-  1. **Full Disk Access** (for the Reader to read `NoteStore.sqlite`)
-     System Settings → Privacy & Security → **Full Disk Access** → enable the host app.
-  2. **Accessibility** (for the Writer to drive Notes)
-     System Settings → Privacy & Security → **Accessibility** → enable the host app.
-     The first edit may also prompt *"<app> wants to control System Events / Notes"* — allow it.
-
-  The Swift helper inherits the host app's Accessibility grant (it does not need its own entry).
-
-## Download & install
-
-```bash
-git clone <REPO_URL> apple-notes-checklist-mcp
-cd apple-notes-checklist-mcp
-./scripts/setup.sh          # builds the Swift helper + the TS server
-```
-
-Then grant permissions and add it to your Claude client — full step‑by‑step in
-**[docs/USING-WITH-CLAUDE.md](docs/USING-WITH-CLAUDE.md)**.
-
-## Build (manual)
-
-```bash
-# 1. Build the Swift Accessibility helper
-cd helper && swift build -c release && cd ..
-
-# 2. Build the TypeScript server
-cd server && npm install && npm run build
-```
-
-## Run / configure in an MCP client
-
-Point your MCP client at the built server over stdio:
-
-```jsonc
-{
-  "mcpServers": {
-    "apple-notes-checklist": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/server/dist/index.js"]
-    }
-  }
-}
-```
-
-Optional env var `NOTES_AX_HELPER` overrides the path to the compiled helper binary
-(default: `helper/.build/release/notes-ax-helper` relative to the repo).
+- ✅ Read a note's real structure: headers → items → **checked/unchecked** (impossible via AppleScript)
+- ✅ Append new **unchecked** items to a specific section
+- ✅ Check / uncheck a specific item (exact or fuzzy match; no-op if already in that state)
+- ✅ Move all checked items from one/more sections into a target section, **preserving checked state**
+- ✅ Verify-after-write on every mutation; aborts rather than guessing on missing/ambiguous targets
+- ✅ No screenshots, no pixel-clicking, no direct database writes
 
 ## Tools
 
@@ -84,35 +45,65 @@ Optional env var `NOTES_AX_HELPER` overrides the path to the compiled helper bin
 |---|---|---|
 | `read_note` | `noteTitle` | Returns `{ title, sections: [{ header, items: [{ text, checked }] }] }`. |
 | `append_checklist_items` | `noteTitle`, `section`, `items[]` | Appends new **unchecked** items to the end of a section. |
-| `set_item_checked` | `noteTitle`, `itemText`, `checked` | Checks/unchecks one item (exact or fuzzy text match); no-op if already in that state. |
-| `move_checked_items` | `noteTitle`, `fromSections[]`, `toSection` | Moves every checked item out of the source sections into the target, preserving checked state. |
+| `set_item_checked` | `noteTitle`, `itemText`, `checked` | Checks/unchecks one item; no-op if already in that state. |
+| `move_checked_items` | `noteTitle`, `fromSections[]`, `toSection` | Moves every checked item into the target section, keeping checked state. |
 
-Notes on behavior:
-- **Note lookup** is by exact title; if more than one note has that title the call fails and
-  lists the candidates (folder / account / modified) rather than guessing. Recently Deleted is
-  excluded.
-- **Sections**: a section header is any non-empty, non-checklist line (the first line is the
-  note title). Non-checklist body text is parsed internally but omitted from output.
-- **Safety rails**: edits never touch the note title or header text; operations abort with an
-  error if an expected section/item is missing or ambiguous; edits are additive/targeted (never
-  select-all or retype existing rows). Every mutation is re-read and verified before returning.
-
-## Testing
+## Quick start
 
 ```bash
-cd server && npm test          # unit tests + a live-DB read integration test
+git clone https://github.com/pbrosen/apple-notes-mcp-server-retains-formatting.git apple-notes-checklist-mcp
+cd apple-notes-checklist-mcp
+./scripts/setup.sh          # builds the Swift helper + the TypeScript server
 ```
 
-Unit tests parse a captured (fake, disposable) note blob in `server/test/fixtures/`. The Writer
-was validated end-to-end against a disposable scratch note.
+Then:
 
-## Known risks
+1. **Grant permissions to your MCP client app** (the app that launches the server — the **Claude**
+   app for Claude Desktop, **Terminal/iTerm** for Claude Code):
+   - System Settings → Privacy & Security → **Full Disk Access** (so the Reader can read the notes DB)
+   - System Settings → Privacy & Security → **Accessibility** (so the Writer can drive Notes)
+   - Restart the client after granting. The first edit also prompts once to **"control Notes"** — allow it.
+2. **Add the server** to your client, pointing at the absolute path to `server/dist/index.js`.
 
-- Relies on a reverse-engineered, undocumented on-disk format that Apple can change in any
-  macOS/Notes update — re-verify the Phase 0 findings after major upgrades.
-- Writing is UI automation via the Accessibility API; it can fail if Notes' view hierarchy
-  changes. Keep a manual fallback until it has a track record.
+👉 **Full step-by-step (Claude Desktop & Claude Code config, example prompts, troubleshooting):
+[docs/USING-WITH-CLAUDE.md](docs/USING-WITH-CLAUDE.md).**
+
+## Requirements
+
+- macOS with Apple Notes signed in — **verified on macOS 26.5.1, Notes 4.13**
+- Node.js 18+ and npm
+- Swift toolchain (Xcode Command Line Tools) to build the helper
+- The target note must be a normal (not password-locked) note with a **unique title**
+
+## Behavior & safety rails
+
+- **Note lookup** is by exact title; if more than one note shares it, the call fails and lists the
+  candidates rather than guessing. Recently Deleted is excluded.
+- A **section header** is any non-empty, non-checklist line (the note's first line is its title). Notes
+  "Heading"-styled lines work too. Non-checklist body text is parsed internally but omitted from output.
+- Edits never touch the note title or other sections, are additive/targeted (never select-all or retype),
+  and are verified before returning. The Writer confirms the correct note is frontmost before editing.
+
+## Known limitations & risks
+
+- Relies on a **reverse-engineered, undocumented** on-disk format that Apple can change in any
+  macOS/Notes update. It's verified for macOS 26 / Notes 4.13; re-verify after major upgrades using the
+  Phase 0 probe (see [`docs/phase0-findings.md`](docs/phase0-findings.md)).
+- Writing is UI automation via the Accessibility API. It **never writes the Notes database directly**, so
+  an interrupted edit can't corrupt your store — but it can leave a half-typed line, like being
+  interrupted while typing. Keep Notes frontmost during writes.
 - Full Disk Access + Accessibility must be granted once, manually — by Apple's design.
-- **Always validate against a disposable scratch note before pointing this at a note you rely
-  on.** Synthetic key events drive the frontmost app, so keep Notes focused during writes.
+- **Always validate on a disposable scratch note before pointing this at a note you rely on.**
+
+## Development
+
+```bash
+cd server && npm test        # unit tests + a live-DB read integration test
 ```
+
+Layout: `server/` (TypeScript MCP server + Reader/Writer), `helper/` (Swift Accessibility helper),
+`docs/` (usage guide, Phase 0 reverse-engineering findings, design & implementation notes).
+
+## License
+
+No license is set yet — add one before wide distribution.
