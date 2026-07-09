@@ -1,32 +1,36 @@
 import { describe, it, expect } from "vitest";
 import { readNote } from "../src/reader/reader.js";
 
-// Integration test: requires the live disposable note "MCP Scratch List" and Full Disk Access.
-// Matches the fixture content captured in Phase 0.
+// Integration test: exercises the full live pipeline (snapshot + sqlite + gunzip + protobuf
+// + grouping) against the real "MCP Scratch List" note. Requires Full Disk Access.
+//
+// Exact-content correctness is locked by proto-parse.test.ts against a frozen blob; this note
+// is also the Writer's mutation target, so here we assert only STABLE invariants that survive
+// item-level edits rather than brittle exact content.
 describe("readNote (integration, live DB)", () => {
   const note = readNote("MCP Scratch List");
+  const KNOWN_HEADERS = ["Personal", "High Priority", "Today", "Normal Priority", "Low Priority", "Done"];
 
-  it("reads the title", () => {
+  it("reads the note title", () => {
     expect(note.title).toBe("MCP Scratch List");
   });
 
-  it("reads sections with correct checked state", () => {
-    const personal = note.sections.find((s) => s.header === "Personal")!;
-    expect(personal.items).toContainEqual({ text: "Go to the dry-cleaners", checked: false });
-    expect(personal.items).toContainEqual({ text: "Confirm Jake’s dentist appointment", checked: true });
-
-    const done = note.sections.find((s) => s.header === "Done")!;
-    expect(done.items.every((i) => i.checked)).toBe(true);
-    expect(done.items).toContainEqual({ text: "Update your linkedin", checked: true });
-
-    const high = note.sections.find((s) => s.header === "High Priority")!;
-    expect(high.items).toContainEqual({ text: "Write a new investors deck and share with John", checked: true });
+  it("returns well-formed sections and items", () => {
+    expect(note.sections.length).toBeGreaterThan(0);
+    for (const s of note.sections) {
+      expect(KNOWN_HEADERS).toContain(s.header);
+      for (const i of s.items) {
+        expect(typeof i.text).toBe("string");
+        expect(i.text.length).toBeGreaterThan(0);
+        expect(typeof i.checked).toBe("boolean");
+      }
+    }
   });
 
-  it("exposes every expected section", () => {
-    const headers = note.sections.map((s) => s.header);
-    for (const h of ["Personal", "High Priority", "Today", "Normal Priority", "Low Priority", "Done"]) {
-      expect(headers).toContain(h);
-    }
+  it("recovers real checked state (the Done section's items are all checked)", () => {
+    const done = note.sections.find((s) => s.header === "Done");
+    expect(done).toBeTruthy();
+    expect(done!.items.length).toBeGreaterThan(0);
+    expect(done!.items.every((i) => i.checked)).toBe(true);
   });
 });
