@@ -138,7 +138,9 @@ cd server && npm test        # unit tests + a live-DB read integration test
 ```
 
 Layout: `server/` (TypeScript MCP server + Reader/Writer), `helper/` (Swift Accessibility helper),
-`docs/` (usage guide, Phase 0 reverse-engineering findings, design & implementation notes).
+`docs/` (usage guide, Phase 0 reverse-engineering findings, design & implementation notes). The
+architecture is intentionally frozen for now; possible future changes and their trade-offs are
+captured in [docs/future-directions.md](docs/future-directions.md).
 
 ## License
 
