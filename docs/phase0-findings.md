@@ -72,6 +72,33 @@ The probed note ("MCP Scratch List") turned out to contain **real, sensitive per
 content**, not throwaway data. Its decoded blob was NOT committed and has been deleted from
 disk. A genuinely disposable note is needed before building the fixture and testing the Writer.
 
-## Accessibility tree
+## Accessibility tree (confirmed) — Writer decision: ESCALATE to Swift
 
-_(to be filled by Task 3)_
+Notes window AX hierarchy (macOS 26.5.1):
+`AXWindow → AXSplitGroup → [AXScrollArea folders, AXScrollArea note-list, AXScrollArea editor]`
+Editor: `AXScrollArea → AXTextArea → AXGroup → AXUnknown` (WebKit content, opaque below).
+
+The **AXTextArea** is the note editor:
+- `value` = the flattened plain text (identical to `note_text`), **with no checklist/checked
+  markers** — i.e. System Events sees exactly what AppleScript sees. Confirms we must use the
+  SQLite Reader for checked state.
+- `entire contents` of the text area returns only 2 descendants (AXGroup, AXUnknown) — the
+  **checkbox elements are NOT exposed to System Events**, so they can't be pressed by name.
+- Setting `AXSelectedTextRange` via System Events is **ignored** (AppleScript can't build the
+  CFRange AXValue) — so the cursor can't be positioned by offset from System Events.
+- `entire contents of front window` **times out (>2 min)** — full traversal is impractical.
+
+Useful Format-menu commands (clickable by name via AX):
+`Mark as Checked` (⇧⌘U, toggles current line), and under `Format ▸ More`:
+`Check All`, `Uncheck All`, `Move Checked to Bottom`, `Delete Checked`.
+
+### Decision: **Escalate to a compiled Swift AX helper (Phase 3).**
+Rationale (all observed, not assumed): System Events can't set the selection range, can't
+address checkboxes, and can't traverse quickly. The raw `AXUIElement` API (Swift) can:
+- get the AXTextArea and its `AXValue` (full text) — fast;
+- **set `AXSelectedTextRange`** via `AXValueCreate(kAXValueCFRangeType)` to position by offset;
+- post `CGEvent` key events (Return / typing / ⌘X / ⌘V) to the focused editor;
+- toggle checked state by positioning on a line and pressing the **"Mark as Checked"** menu
+  item (or ⇧⌘U), gated on the Reader's current state so we never blind-toggle.
+
+Structure/state comes from the SQLite Reader; the Swift helper does positioning + edits only.
