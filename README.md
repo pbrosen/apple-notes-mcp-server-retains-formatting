@@ -121,6 +121,14 @@ More freeform notes will still read their checkboxes correctly but may report ex
   an interrupted edit can't corrupt your store — but it can leave a half-typed line, like being
   interrupted while typing. Keep Notes frontmost during writes.
 - Full Disk Access + Accessibility must be granted once, manually — by Apple's design.
+- **Known issue — appended items can render bold:** Notes applies a bold ("Emphasized") style when it
+  *finalizes* a checklist paragraph that was created via automation. An appended item becomes bold once
+  another item is placed below it in the same section — so in a multi-item append every item except the
+  last comes out bold, and a single appended item can turn bold later when you append another beneath it.
+  The most-recently-appended item in a section stays regular. Items are otherwise correct (right text,
+  unchecked, correct section), and existing (human-typed) items are never affected. Standard un-bolding
+  (⌘B, re-applying Body/Checklist, timing changes) did not reliably reverse it in testing; a proper fix
+  is still being investigated.
 - **Always validate on a disposable scratch note before pointing this at a note you rely on.**
 
 ## Development

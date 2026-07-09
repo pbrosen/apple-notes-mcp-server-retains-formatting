@@ -221,4 +221,7 @@ try the read tool first to see how it's interpreted before using the write tools
 - Writing is UI automation through the Accessibility API. It never writes the Notes database
   directly, so an interrupted edit can't corrupt your store — but it can leave a half‑typed line,
   just like being interrupted while typing.
+- **Known issue:** appended items can render **bold** (Notes bolds a checklist paragraph when it's
+  finalized via automation). The text, unchecked state, and section are correct; only the styling is
+  affected, and existing items aren't touched. A fix is still being investigated — see the README.
 - **Validate on a disposable note before using it on anything you rely on.**

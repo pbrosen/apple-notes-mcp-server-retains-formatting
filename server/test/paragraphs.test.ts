@@ -39,11 +39,20 @@ describe("paragraphsToNote", () => {
     ]);
   });
 
-  it("omits headers that have no checklist items under them", () => {
-    const only = paragraphsToNote([
-      p("T", false), p("Empty", false), p("prose", false),
+  it("includes empty NAMED sections so they are visible and appendable", () => {
+    const n = paragraphsToNote([
+      p("T", false), p("Full", false), p("buy milk", true), p("Empty", false),
     ]);
-    expect(only.sections).toEqual([]);
+    expect(n.sections).toEqual([
+      { header: "Full", items: [{ text: "buy milk", checked: false }] },
+      { header: "Empty", items: [] },
+    ]);
+  });
+
+  it("drops an empty leading (null-header) section", () => {
+    // a note with only a title and a header, no items before the header
+    const n = paragraphsToNote([p("T", false), p("Only Header", false)]);
+    expect(n.sections).toEqual([{ header: "Only Header", items: [] }]);
   });
 
   it("ignores blank lines and empty checklist rows", () => {
