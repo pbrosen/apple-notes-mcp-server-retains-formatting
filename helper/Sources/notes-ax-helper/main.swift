@@ -100,6 +100,16 @@ let KEY_L: CGKeyCode = 37
 let KEY_X: CGKeyCode = 7
 let KEY_V: CGKeyCode = 9
 
+// Guard against editing the wrong note: the editor operates on whatever note is frontmost, so
+// confirm the front note's title (its first line) matches what the caller expects.
+func verifyFrontNote(_ ta: AXUIElement, _ json: [String: Any]) {
+  guard let expect = json["expectTitle"] as? String else { return }
+  let first = getText(ta).components(separatedBy: "\n").first ?? ""
+  if first != expect {
+    fail("wrong note is open: front note is \"\(first)\", expected \"\(expect)\". Open that note in Notes, then retry.")
+  }
+}
+
 func focusEditor(_ notes: NSRunningApplication, _ ta: AXUIElement) {
   notes.activate(options: [])
   AXUIElementSetAttributeValue(ta, kAXFocusedAttribute as CFString, kCFBooleanTrue)
@@ -130,6 +140,7 @@ case "append":
   guard let afterLineText = json["afterLineText"] as? String,
         let items = json["items"] as? [String] else { fail("append: missing afterLineText/items") }
   let anchorIsChecklist = (json["anchorIsChecklist"] as? Bool) ?? true
+  verifyFrontNote(ta, json)
   focusEditor(notes, ta)
   let text = getText(ta)
   guard let (loc, len) = lineRange(text, afterLineText) else {
@@ -154,6 +165,7 @@ case "toggle":
   let desired = (json["desiredChecked"] as? Bool) ?? false
   let current = (json["currentChecked"] as? Bool) ?? false
   if desired == current { ok(["toggled": false]) }
+  verifyFrontNote(ta, json)
   focusEditor(notes, ta)
   let text = getText(ta)
   guard let (loc, len) = lineRange(text, lineText) else {
@@ -170,6 +182,7 @@ case "move":
         let toAfterLineText = json["toAfterLineText"] as? String else {
     fail("move: missing lineText/toAfterLineText")
   }
+  verifyFrontNote(ta, json)
   focusEditor(notes, ta)
   let text = getText(ta)
   guard let (loc, len) = lineRange(text, lineText) else {
