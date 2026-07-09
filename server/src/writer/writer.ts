@@ -1,7 +1,8 @@
-import { execFileSync } from "node:child_process";
 import { readNote } from "../reader/reader.js";
 import { runHelper } from "./helper.js";
-import { PermissionError, StructureError, VerifyError } from "../errors.js";
+import { StructureError, VerifyError } from "../errors.js";
+import { sleepSync } from "../util.js";
+import { openNote } from "./notesApp.js";
 import type { Note, Section, Item } from "../types.js";
 
 function sectionByHeader(note: Note, header: string): Section | undefined {
@@ -9,44 +10,11 @@ function sectionByHeader(note: Note, header: string): Section | undefined {
 }
 
 /**
- * Bring Notes to the front and show the target note, so the helper edits the RIGHT note (its
- * editor always operates on the frontmost note). The helper additionally verifies the front
- * note's title before mutating.
- */
-function openNote(title: string): void {
-  const script =
-    `tell application "Notes"\n` +
-    `  activate\n` +
-    `  set matches to (every note whose name is ${JSON.stringify(title)})\n` +
-    `  if (count of matches) is 0 then error "note-not-found"\n` +
-    `  show item 1 of matches\n` +
-    `end tell`;
-  try {
-    execFileSync("osascript", ["-e", script], { stdio: ["ignore", "ignore", "pipe"] });
-  } catch (e) {
-    const msg = String((e as { stderr?: string; message?: string }).stderr ?? (e as Error).message ?? e);
-    if (/-1743|not authorized|assistive|automation/i.test(msg)) {
-      throw new PermissionError(
-        "Automation permission to control Notes is not granted. Approve the 'control Notes' " +
-          "prompt (System Settings → Privacy & Security → Automation), then retry.",
-      );
-    }
-    throw new StructureError(`Could not open note "${title}" in Notes: ${msg}`);
-  }
-  sleepSync(400); // let the front window switch to the target note
-}
-
-/** Synchronous sleep (the Writer path is fully synchronous). */
-function sleepSync(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-/**
  * Poll the Reader until `pred(note)` holds or the timeout elapses. Synthetic key events are
  * applied by Notes asynchronously and only then flushed to SQLite, so a mutation is not
  * visible immediately after the helper returns. Returns the last note read either way.
  */
-function readNoteUntil(title: string, pred: (n: Note) => boolean, timeoutMs = 5000, intervalMs = 300): Note {
+export function readNoteUntil(title: string, pred: (n: Note) => boolean, timeoutMs = 5000, intervalMs = 300): Note {
   const start = Date.now();
   let note = readNote(title);
   while (!pred(note)) {
