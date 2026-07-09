@@ -58,14 +58,19 @@ cd apple-notes-checklist-mcp
 
 Then:
 
-1. **Grant permissions to your MCP client app** (the app that launches the server — the **Claude**
-   app for Claude Desktop, **Terminal/iTerm** for Claude Code):
-   - System Settings → Privacy & Security → **Full Disk Access** (so the Reader can read the notes DB)
-   - System Settings → Privacy & Security → **Accessibility** (so the Writer can drive Notes)
-   - Restart the client after granting. The first edit also prompts once to **"control Notes"** — allow it.
-2. **Add the server** to your client, pointing at the absolute path to `server/dist/index.js`.
+1. **Register the server** with your client, pointing at the absolute path to `server/dist/index.js`.
+   For **Claude Desktop / Claude Cowork**: Settings → Connectors → Add connector → "Local command",
+   command `node`, argument = that path. For **Claude Code**:
+   `claude mcp add apple-notes-checklist -- node /abs/path/server/dist/index.js`.
+2. **Grant Full Disk Access + Accessibility** — but read this carefully, it's the #1 gotcha:
+   - **Claude Desktop / Claude Cowork:** grant them to the **`node` binary** (e.g. `/usr/local/bin/node`),
+     **not** the Claude app — Claude Desktop disclaims TCC responsibility for the subprocess, so
+     granting the app does nothing.
+   - **Claude Code in Terminal/iTerm:** grant the **terminal app**.
+   - If unsure, grant the `node` binary (works in every case). Then **fully quit + relaunch** the client.
+     The first edit raises a one-time **"control Notes"** prompt — allow it.
 
-👉 **Full step-by-step (Claude Desktop & Claude Code config, example prompts, troubleshooting):
+👉 **Full step-by-step (finding the exact `node` path, Connectors UI, example prompts, troubleshooting):
 [docs/USING-WITH-CLAUDE.md](docs/USING-WITH-CLAUDE.md).**
 
 ## Requirements

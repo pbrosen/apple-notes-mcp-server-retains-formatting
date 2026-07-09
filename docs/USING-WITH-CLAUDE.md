@@ -40,39 +40,76 @@ you'll need:
 
 ## 2. Grant macOS permissions — this is the important part
 
-The two permissions must be granted to **the app that launches the server process**, not to the
-server itself. That app is your MCP client:
+macOS grants these permissions to **the process that actually opens the files** — and that is
+**not always the client app**. There are two cases:
 
-| If you run the server via… | Grant permissions to… |
-|---|---|
-| **Claude Desktop** | the **Claude** app |
-| **Claude Code / any CLI** in Terminal | **Terminal** (or iTerm, etc.) |
-| a different host app | that host app |
+- **Claude Desktop / Claude Cowork** launch the server through a wrapper that *disclaims*
+  responsibility for the subprocess, so macOS checks the **`node` binary itself**. Granting the
+  **Claude app** Full Disk Access does **nothing** here — you must grant the **`node` binary**.
+  *(This is the confirmed, real-world setup.)*
+- **Claude Code / a CLI run in Terminal or iTerm** — the terminal app is the responsible process, so
+  granting **Terminal / iTerm** works.
 
-Grant both:
+If in doubt, grant the **`node` binary** — that works in every case.
 
-1. **Full Disk Access** — lets the Reader read `NoteStore.sqlite`.
-   System Settings → **Privacy & Security → Full Disk Access** → toggle on your client app (click
-   **+** and add it if it's not listed).
-2. **Accessibility** — lets the Writer drive Notes.
-   System Settings → **Privacy & Security → Accessibility** → toggle on the same app.
+### 2a. Find the exact `node` binary
 
-The first time the server edits a note you may also get a one‑time prompt
-**"<app> wants to control Notes"** — click **Allow** (this is the Automation permission; you can
-review it later under Privacy & Security → Automation).
+> Order note: this needs the server process to exist, so **register it first (step 3), then come back
+> here** — or skip discovery and just grant the common path `/usr/local/bin/node`.
 
-If you toggled a permission while the client was running, **quit and reopen the client** so it picks
-up the change. (The Swift helper inherits the client's Accessibility grant — it does not need its own
-entry.)
+With the server registered and the client running (so the server process exists), open **Terminal**:
+
+```bash
+ps aux | grep "apple-notes-checklist-mcp/server/dist/index.js"
+# look for a line like: /usr/local/bin/node /Users/you/apple-notes-checklist-mcp/server/dist/index.js
+realpath /usr/local/bin/node   # resolve symlinks (nvm/Homebrew often symlink node); use the result below
+```
+
+Use the resolved path (commonly `/usr/local/bin/node`, or an nvm/Homebrew path).
+
+### 2b. Grant Full Disk Access + Accessibility to that binary
+
+For **each** of System Settings → **Privacy & Security → Full Disk Access** and → **Accessibility**:
+
+1. Click **+**.
+2. In the file picker press **⌘⇧G**, paste the exact `node` path from step 2a, and select the binary.
+3. Make sure its **toggle is on**.
+4. **Fully quit (⌘Q) and relaunch** Claude Desktop / Claude so the server subprocess restarts under
+   the new permission.
+
+Full Disk Access lets the Reader read the Notes database; Accessibility lets the Writer drive Notes
+(the Swift helper is spawned by `node`, so it inherits `node`'s Accessibility grant — no separate
+entry needed). The first edit may also raise a one-time **"control Notes"** prompt — click **Allow**.
+
+> ⚠️ **Security note:** granting Full Disk Access to your `node` binary grants it to **every** Node
+> script that binary runs, not just this server — a broader grant than one app. That's your call to
+> make. Given the access level, review the server source before wiring it into an automated/scheduled
+> task, especially a recurring one that touches notes you rely on.
 
 ---
 
 ## 3. Add the server to your client
 
-### Claude Desktop
+### Claude Desktop / Claude Cowork (Connectors UI — confirmed)
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (create it if missing) and add
-the server, using the **absolute** path printed by `setup.sh`:
+Claude Cowork bridges local MCP servers through the **Claude desktop app**, so you register the server
+in Claude Desktop and Cowork picks up its tools automatically.
+
+In the Claude app: **Settings → Connectors → Add connector → "Local command"**, then set:
+- **Command:** `node`
+- **Argument:** the absolute path to the server entrypoint, e.g.
+  `/Users/you/apple-notes-checklist-mcp/server/dist/index.js`
+
+Save, then **fully quit (⌘Q) and relaunch** Claude Desktop. The four tools (`read_note`,
+`append_checklist_items`, `set_item_checked`, `move_checked_items`) then become available to Claude —
+and to Cowork tasks that run through it.
+
+> **Cowork can't do the setup for you.** Its sandbox is a separate environment; it can't run Terminal
+> commands on your Mac, register connectors, or grant permissions. Steps 2 and 3 are yours to do by
+> hand; once the tools appear, Cowork can use them (and, e.g., swap a computer-use task over to them).
+
+**Alternative (config file):** some versions also read
+`~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -84,9 +121,6 @@ the server, using the **absolute** path printed by `setup.sh`:
   }
 }
 ```
-
-Quit and reopen Claude Desktop. You should see the four tools available (look for the tools/plug
-icon).
 
 ### Claude Code (CLI)
 
@@ -166,8 +200,9 @@ try the read tool first to see how it's interpreted before using the write tools
 
 | Symptom | Cause / fix |
 |---|---|
-| `Full Disk Access is not granted` | Grant FDA to your client app (step 2), then quit + reopen it. |
-| `Accessibility permission not granted` | Grant Accessibility to your client app (step 2), then restart it. |
+| `Full Disk Access is not granted` (esp. on Claude Desktop/Cowork after granting the *app*) | Grant FDA to the **`node` binary**, not the Claude app (step 2/2a), then fully quit + relaunch. |
+| `Accessibility permission not granted` | Grant Accessibility to the same **`node` binary** (step 2), then fully quit + relaunch. |
+| Granted the Claude app but still denied | Expected — Claude Desktop disclaims responsibility for the subprocess; grant the **`node` binary** instead. |
 | A "control Notes" prompt appears | Click **Allow** — that's the one‑time Automation grant. |
 | `No note titled "X" found` | Title must match exactly and not be in Recently Deleted. |
 | `Multiple notes titled "X" found` | Titles must be unique — rename one. The error lists the duplicates. |
