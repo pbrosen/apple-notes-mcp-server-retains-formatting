@@ -37,19 +37,36 @@ func role(_ el: AXUIElement) -> String { (attr(el, kAXRoleAttribute as String) a
 func children(_ el: AXUIElement) -> [AXUIElement] {
   (attr(el, kAXChildrenAttribute as String) as? [AXUIElement]) ?? []
 }
-func firstChild(_ el: AXUIElement, _ r: String) -> AXUIElement? { children(el).first { role($0) == r } }
 func allChildren(_ el: AXUIElement, _ r: String) -> [AXUIElement] { children(el).filter { role($0) == r } }
 
+/// Recursively find the first AXTextArea within `el`, bounded by `depth` (so we never descend into
+/// the editor's own deep, web-backed content).
+func firstTextArea(_ el: AXUIElement, _ depth: Int) -> AXUIElement? {
+  if depth < 0 { return nil }
+  for child in children(el) {
+    if role(child) == "AXTextArea" { return child }
+    if let found = firstTextArea(child, depth - 1) { return found }
+  }
+  return nil
+}
+
 func findTextArea(_ app: AXUIElement) -> AXUIElement? {
-  // Search every window for the one that actually contains the note editor (a split group whose
-  // last scroll area holds a text area). Don't assume the editor is the frontmost window — Notes
-  // can have stray/secondary windows in front.
+  // Search every window for the note editor (an AXTextArea), recursing rather than assuming a fixed
+  // path. This works for the main window (editor under a split group), a standalone note window (no
+  // split group / sidebar), and ignores stray/secondary windows (e.g. Quick Note, share sheets).
   for win in allChildren(app, "AXWindow") {
-    if let split = firstChild(win, "AXSplitGroup"),
-       let editor = allChildren(split, "AXScrollArea").last,
-       let ta = firstChild(editor, "AXTextArea") {
-      return ta
-    }
+    if let ta = firstTextArea(win, 6) { return ta }
+  }
+  return nil
+}
+
+/// Find the editor, retrying while Notes finishes launching/rendering (e.g. a cold 6:30 AM run).
+/// Re-activates Notes each attempt so a window comes forward. Returns nil after ~4s.
+func resolveTextArea(_ app: AXUIElement, _ notes: NSRunningApplication) -> AXUIElement? {
+  for attempt in 0..<12 {
+    if let ta = findTextArea(app) { return ta }
+    notes.activate(options: [])
+    usleep(attempt < 3 ? 150_000 : 350_000)
   }
   return nil
 }
@@ -137,7 +154,9 @@ if !AXIsProcessTrusted() {
   fail("Accessibility permission not granted for the process running this helper (grant it in System Settings → Privacy & Security → Accessibility).")
 }
 let app = AXUIElementCreateApplication(notes.processIdentifier)
-guard let ta = findTextArea(app) else { fail("could not locate the Notes editor text area (is a note open?)") }
+guard let ta = resolveTextArea(app, notes) else {
+  fail("could not locate the Notes editor text area after retrying (is Notes able to open a note window? on a scheduled run, ensure the Mac is unlocked and Notes can launch)")
+}
 
 switch op {
 case "read":
